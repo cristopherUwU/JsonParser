@@ -1,7 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
-module JsonFuntor where
-
--- import Control.Applicative (Alternative (empty, (<|>)), Applicative (pure, (<*>)))
+module JsonFunctor where
 
 import Control.Applicative (Alternative (empty, (<|>)))
 import Data.Char (isDigit, isSpace)
@@ -28,6 +26,9 @@ instance Alternative Parser where
   empty = Parser (const Nothing)
   (<|>) (Parser f) (Parser b) = Parser (\x -> f x <|> b x)
 
+example :: String
+example = "{\"employee\": [{\"name\":\"sonoo\",\"salary\":56000,\"married\":true}]}"
+
 parseBool :: Parser JsonValue
 parseBool =
   Parser
@@ -47,25 +48,22 @@ separateString' (x:xs) res counter
   where updateCounter '\"' c = c + 1
         updateCounter _ c = c
 
-
 separateString :: String -> Maybe (JsonValue, String)
 separateString xn = separateString' xn [] 0
 
 parseString :: Parser JsonValue
 parseString = Parser separateString
 
---
 divNumber' :: String -> (Double -> Maybe JsonValue) -> Maybe (JsonValue, String)
 divNumber' xs f = case span isDigit xs of
   ("", _) -> Nothing
-  (num, str) -> f (read num) >>= \j -> Just (j, str)
+  (num, str) -> Just (,) <*> f (read num) <*> Just str
 
 divNumber :: String -> Maybe (JsonValue, String)
 divNumber [] = Nothing
 divNumber xn@(x : xs)
   | x == '-' = divNumber' xs (\num -> Just (JNumber (-1 * num)))
   | otherwise = divNumber' xn (Just . JNumber)
---div number se puede usar alternative
 
 parseNumber :: Parser JsonValue
 parseNumber = Parser divNumber
@@ -98,21 +96,6 @@ splitAcc' c (x : xs) ys bracket brace
 splitAcc :: Char -> Maybe String -> [String]
 splitAcc _ Nothing = error "Error in pairs"
 splitAcc c (Just xs) = splitAcc' c xs [] 0 0
-
--- splitAcc' :: Char -> String -> String -> Int -> Int -> [String]
--- splitAcc' _ [] [] _ _ = []
--- splitAcc' _ [] ys _ _ = [reverse ys]
--- splitAcc' c (x : xs) ys bracket brace
---   | x `elem` [',', ':'] && bracket == 0 && brace == 0 && not (null ys) = reverse ys : splitAcc' c xs [] bracket brace
---   | x == '[' = splitAcc' c xs (x : ys) (bracket + 1) brace  | x == '{' = splitAcc' c xs (x : ys) bracket (brace + 1)
---   | x == ']' = splitAcc' c xs (x : ys) (bracket - 1) brace
---   | x == '}' = splitAcc' c xs (x : ys) bracket (brace - 1)
---   | otherwise = splitAcc' c xs (x : ys) bracket brace
-
--- splitAcc :: Char -> Maybe String -> [String]
--- splitAcc _ Nothing = error "Error in pairs"
--- splitAcc c (Just xs) = splitAcc' c xs [] 0 0
-
 
 parseParser :: String -> Parser JsonValue -> Maybe JsonValue
 parseParser xs p =
@@ -154,18 +137,5 @@ separateList xs = Just (JList (extractJust (map parseTo (splitAcc ',' (removePai
 parseList :: Parser JsonValue
 parseList = Parser separateList
 
-example :: String
-example = "{\"employee\": [{\"name\":\"sonoo\",\"salary\":56000,\"married\":true}]}"
-
 getJLine :: String -> JsonValue
 getJLine xs = fst (fromJust (parse (parseJson <|> parseList <|> parseString <|> parseBool <|> parseNumber) xs))
-
-modify :: JsonValue -> JsonValue
-modify (JObject s) = JObject [(x, Just (modify (fromJust y))) | (x, y) <- s]
-modify (JNumber n) = JNumber (n + 10)
-modify (JString s) = JString (s ++ "hello")
-modify (JBool b) = JBool (not b)
-modify (JList l) = JList (fmap modify l)
-modify d = d
-
-appTest = (\(j, _) -> modify j) <$> parse parseJson example
